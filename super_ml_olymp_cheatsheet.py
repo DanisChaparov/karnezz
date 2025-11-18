@@ -1,71 +1,76 @@
 """
-SUPER_ML_OLYMP_CHEATSHEET.PY
+SUPER ML OLYMP CHEATSHEET
+=========================
 
-Большая шпаргалка для олимпиадных ML-задач.
+Файл-шпаргалка для олимпиадных ML-задач.
 
-ЦЕЛЬ:
-- Чтобы за 1 файл можно было:
-  * вспомнить хронологию решения любой задачи,
-  * быстро собрать код для новой задачи (A-подобной или B-подобной),
-  * вспомнить, что делает каждая важная функция.
+СТРУКТУРА:
+0. Импорты (и комментарии, зачем каждый)
+1. Часто используемые функции (с объяснением)
+2. Памятка по базовым командам/операциям (pandas, sklearn)
+3. БУСТИНГИ (CatBoost) — что это и как использовать
+4. ШАБЛОНЫ ЗАДАЧ:
+   4.1. Табличная регрессия (A-подобная задача) с CatBoost
+   4.2. Табличная классификация с CatBoost
+   4.3. Merge нескольких таблиц (пример)
+   4.4. Текстовые пары (B-подобная задача) — TF-IDF + LogisticRegression
+   4.5. Генеративная задача (локальная LLM)
+   4.6. Аудио baseline (как из аудио сделать табличку)
 
-ТИПЫ ЗАДАЧ, КОТОРЫЕ ПОКРЫВАЕМ:
-1) Табличная регрессия (как задача A: предсказать число, MAE / log-MAE).
-2) Табличная классификация (класс по табличным фичам).
-3) Несколько таблиц (merge по ключу: geo_data, users, items и т.д.).
-4) Текстовые задачи / пары текстов (TF-IDF + LogisticRegression).
-5) Генеративные задачи с локальной LLM (модель лежит в Shared, без интернета).
-
-СТРУКТУРА ФАЙЛА:
-0. Импорты
-1. Общий чек-лист для любой ML-задачи
-2. Утилиты (функции-кирпичики: метрики, работа с фичами)
-3. Шаблон: табличная РЕГРЕССИЯ (A-подобные задачи)
-4. Шаблон: табличная КЛАССИФИКАЦИЯ
-5. Шаблон: merge нескольких таблиц по ключу
-6. Шаблон: текстовая задача / пары текстов (TF-IDF + LogisticRegression)
-7. Шаблон: генеративная задача с локальной LLM
-8. Мини-справочник по функциям и классам
+Идея:
+- Открываешь этот файл.
+- Берёшь нужный шаблон (функцию), копируешь в своё решение.
+- Меняешь пути к файлам и имена колонок.
+- Запускаешь.
 """
 
 # ============================================================
-# 0. ИМПОРТЫ
+# 0. ИМПОРТЫ (и для чего они нужны)
 # ============================================================
 
-# Работа с таблицами
-import pandas as pd              # главный инструмент для табличных данных
-import numpy as np               # математические операции, массивы
+import os  # работа с путями к файлам/папкам
+import numpy as np  # массивы, математика
+import pandas as pd  # табличные данные (DataFrame)
 
-# Разбиение выборки на train/val
-from sklearn.model_selection import train_test_split
+# Разбиение данных на train/val
+from sklearn.model_selection import train_test_split  # train_test_split
 
-# Модели для табличных данных
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-
-# Метрики
-from sklearn.metrics import (
-    mean_absolute_error,         # MAE для регрессии
-    r2_score,                    # R² для регрессии
-    accuracy_score,              # accuracy для классификации
-    f1_score,                    # F1 для классификации
+# Модели для табличных задач
+from sklearn.ensemble import (
+    RandomForestRegressor,    # ансамбль деревьев для регрессии
+    RandomForestClassifier,   # ансамбль деревьев для классификации
+)
+from sklearn.linear_model import (
+    LinearRegression,         # линейная регрессия (baseline)
+    LogisticRegression,       # логистическая регрессия (часто с TF-IDF)
+)
+from sklearn.tree import (
+    DecisionTreeRegressor,    # одно дерево для регрессии
+    DecisionTreeClassifier,   # одно дерево для классификации
 )
 
-# Для кодирования категориальных таргетов и текстовых меток
-from sklearn.preprocessing import LabelEncoder
+# Метрики качества
+from sklearn.metrics import (
+    mean_absolute_error,      # MAE для регрессии
+    r2_score,                 # R² для регрессии
+    accuracy_score,           # accuracy для классификации
+    f1_score,                 # F1 (например weighted F1 для B-задачи)
+)
 
-# Для текстов (TF-IDF)
-from sklearn.feature_extraction.text import TfidfVectorizer
+# Преобразование меток (строк → числа)
+from sklearn.preprocessing import LabelEncoder  # кодирование классов
 
-# Опционально: бустинг по деревьям (если установлен)
+# Для текстовых задач (TF-IDF)
+from sklearn.feature_extraction.text import TfidfVectorizer  # превращает текст в признаки
+
+# Попытка импортировать CatBoost (буст по деревьям)
 try:
     from catboost import CatBoostRegressor, CatBoostClassifier
 except ImportError:
     CatBoostRegressor = None
     CatBoostClassifier = None
 
-# (для генеративных задач)
+# Попытка импортировать всё для генеративных задач (LLM)
 try:
     import torch
     from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -76,86 +81,16 @@ except ImportError:
 
 
 # ============================================================
-# 1. ОБЩИЙ ЧЕК-ЛИСТ ДЛЯ ЛЮБОЙ ML-ЗАДАЧИ
-# ============================================================
-
-"""
-УНИВЕРСАЛЬНЫЙ ПЛАН:
-
-1) ПРОЧИТАТЬ УСЛОВИЕ:
-   - Что хотим предсказать?
-       * число    → регрессия
-       * класс    → классификация
-       * текст    → генерация / NLP
-   - Какая МЕТРИКА?
-       * MAE, RMSE, log-MAE, R²
-       * accuracy, F1, ROC-AUC
-       * weighted F1, macro F1 и т.п.
-
-2) ЗАГРУЗИТЬ ДАННЫЕ:
-   - train: признаки + target
-   - test: только признаки
-   - sample_submission: формат сабмита
-   - дополнительные таблицы: geo_data, items, users и т.п.
-
-3) ПОСМОТРЕТЬ НА ДАННЫЕ:
-   - df.head()   → первые строки
-   - df.info()   → типы столбцов, пропуски
-   - df.describe() → статистика по числам
-
-4) ОПРЕДЕЛИТЬ КОЛОНКИ:
-   - TARGET_COL: как называется таргет в train
-   - ID_COL: ID объекта (для сабмита)
-
-5) СОБРАТЬ X, y:
-   - y = train[TARGET_COL]
-   - X = train.drop(columns=[TARGET_COL, ID_COL, ...])
-   - X_test = test.drop(columns=[ID_COL, ...])
-
-6) ЕСЛИ ЕСТЬ НЕСКОЛЬКО ТАБЛИЦ:
-   - сделать merge по ключу:
-       train = train.merge(geo_data, on="h3_index", how="left")
-       test  = test.merge(geo_data, on="h3_index", how="left")
-
-7) ОБРАБОТАТЬ ПРИЗНАКИ:
-   - заполнить пропуски (если нужно),
-   - придумать простые фичи (деления, суммы, логарифмы).
-
-8) КАТЕГОРИАЛЬНЫЕ ПРИЗНАКИ:
-   - через get_dummies (one-hot)  ИЛИ
-   - через CatBoost с cat_features.
-
-9) train_test_split:
-   - X_train, X_val, y_train, y_val = train_test_split(...)
-   - для классификации → stratify=y.
-
-10) ВЫБРАТЬ МОДЕЛЬ:
-   - регрессия: RandomForestRegressor / CatBoostRegressor / LinearRegression
-   - классификация: RandomForestClassifier / CatBoostClassifier / LogisticRegression
-   - тексты: TF-IDF + LogisticRegression
-   - генерация: локальная LLM (AutoModelForCausalLM).
-
-11) ОБУЧИТЬ МОДЕЛЬ И ОЦЕНИТЬ НА ВАЛИДАЦИИ.
-
-12) ОБУЧИТЬ НА ВСЕХ train-ДАННЫХ.
-
-13) ПРЕДСКАЗАТЬ ДЛЯ test.
-
-14) СДЕЛАТЬ submission.csv и сохранить:
-   submission.to_csv("submission.csv", index=False)
-"""
-
-
-# ============================================================
-# 2. УТИЛИТЫ (ФУНКЦИИ, КОТОРЫЕ ПОЛЕЗНО ЗНАТЬ)
+# 1. ЧАСТО ИСПОЛЬЗУЕМЫЕ ФУНКЦИИ (утилиты)
 # ============================================================
 
 def print_basic_info(df: pd.DataFrame, name: str = "df"):
     """
-    Печатает базовую информацию о таблице:
-    - shape
-    - head()
-    - info()
+    Вывести базовую инфу о таблице:
+    - название (name)
+    - размер (shape)
+    - первые строки (head)
+    - типы столбцов и кол-во значений (info)
     """
     print(f"\n=== {name} ===")
     print("shape:", df.shape)
@@ -165,8 +100,11 @@ def print_basic_info(df: pd.DataFrame, name: str = "df"):
 
 def mae_log10(y_true, y_pred):
     """
-    MAE на логарифмах, как в задаче A:
-      mae_log10 = MAE(log10(y_true+1), log10(y_pred+1))
+    MAE на логарифмах (как в задаче A):
+
+    mae_log10 = MAE(log10(y_true + 1), log10(y_pred + 1))
+
+    Используется, когда метрика в условии через log10.
     """
     return mean_absolute_error(
         np.log10(y_true + 1),
@@ -176,17 +114,20 @@ def mae_log10(y_true, y_pred):
 
 def encode_categoricals_get_dummies(X: pd.DataFrame, X_test: pd.DataFrame):
     """
-    Кодирует категориальные признаки через pd.get_dummies() (one-hot).
+    Кодирование категориальных признаков через one-hot (pd.get_dummies).
+
     Возвращает:
-      X_model, X_test_model, cat_cols
+    - X_model      : DataFrame с dummy-признаками для train
+    - X_test_model : DataFrame с dummy-признаками для test
+    - cat_cols     : список категориальных колонок
     """
     cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
-    print("\nКатегориальные признаки:", cat_cols)
+    print("\nКатегориальные признаки (get_dummies):", cat_cols)
 
     X_model = pd.get_dummies(X, columns=cat_cols)
     X_test_model = pd.get_dummies(X_test, columns=cat_cols)
 
-    # Выравниваем столбцы test под train (очень важно!)
+    # выравниваем столбцы test под train
     X_test_model = X_test_model.reindex(columns=X_model.columns, fill_value=0)
 
     print("X_model shape:", X_model.shape)
@@ -195,10 +136,18 @@ def encode_categoricals_get_dummies(X: pd.DataFrame, X_test: pd.DataFrame):
     return X_model, X_test_model, cat_cols
 
 
-def split_train_val(X, y, is_classification: bool = False, test_size: float = 0.2, random_state: int = 42):
+def split_train_val(
+    X,
+    y,
+    is_classification: bool = False,
+    test_size: float = 0.2,
+    random_state: int = 42
+):
     """
-    Обертка над train_test_split.
-    Если is_classification = True, делаем stratify=y.
+    Обёртка над train_test_split.
+
+    Если is_classification=True — используем stratify=y,
+    чтобы баланс классов в train/val был похожий.
     """
     kwargs = dict(test_size=test_size, random_state=random_state)
     if is_classification:
@@ -212,16 +161,15 @@ def split_train_val(X, y, is_classification: bool = False, test_size: float = 0.
 
 def evaluate_regression(y_val, y_pred, use_log_mae: bool = True):
     """
-    Печатает метрики для регрессии:
+    Печатаем метрики для регрессии:
     - MAE
     - R²
-    - MAE_LOG10 и score = 1/(1+MAE_LOG10), если use_log_mae=True
+    - MAE_LOG10 и score = 1/(1 + MAE_LOG10), если use_log_mae=True
     """
     mae = mean_absolute_error(y_val, y_pred)
     r2 = r2_score(y_val, y_pred)
     print(f"\n[REG] MAE: {mae:.6f}")
-    print(f"[REG] R2:  {r2:.6f}")
-
+    print(f"[REG] R² : {r2:.6f}")
     if use_log_mae:
         mae_l = mae_log10(y_val, y_pred)
         score = 1 / (1 + mae_l)
@@ -231,47 +179,141 @@ def evaluate_regression(y_val, y_pred, use_log_mae: bool = True):
 
 def evaluate_classification(y_val, y_pred):
     """
-    Печатает метрики для классификации:
+    Печатаем метрики для классификации:
     - accuracy
     - weighted F1
     """
     acc = accuracy_score(y_val, y_pred)
     f1w = f1_score(y_val, y_pred, average="weighted")
-    print(f"\n[CLS] Accuracy:     {acc:.6f}")
-    print(f"[CLS] Weighted F1:  {f1w:.6f}")
+    print(f"\n[CLS] Accuracy:    {acc:.6f}")
+    print(f"[CLS] Weighted F1: {f1w:.6f}")
 
 
 # ============================================================
-# 3. ШАБЛОН: ТАБЛИЧНАЯ РЕГРЕССИЯ (A-ПОДОБНЫЕ ЗАДАЧИ)
+# 2. ПАМЯТКА: БАЗОВЫЕ ОПЕРАЦИИ / КОМАНДЫ
 # ============================================================
 
-def tabular_regression_template():
+BASIC_COMMANDS_HELP = """
+PANDAS (таблицы)
+----------------
+pd.read_csv(path)           - прочитать csv в DataFrame
+pd.read_parquet(path)       - прочитать parquet
+
+df.head(n)                  - первые n строк
+df.info()                   - типы столбцов, кол-во значений
+df.describe()               - статистика по числам
+
+df["col"]                   - взять один столбец
+df[["c1","c2"]]             - несколько столбцов
+
+df.drop(columns=[...])      - удалить столбцы
+df.merge(other, on="key", how="left")
+                            - соединить две таблицы как SQL LEFT JOIN
+
+pd.get_dummies(df, columns=[...])
+                            - one-hot кодирование категориальных признаков
+
+SKLEARN (общая схема)
+---------------------
+1) X, y
+    y = train[TARGET_COL]
+    X = train.drop(columns=[TARGET_COL, ...])
+
+2) train/val split:
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+
+3) модель:
+    model = RandomForestRegressor(...)
+    model.fit(X_train, y_train)
+
+4) предсказать:
+    y_val_pred = model.predict(X_val)
+
+5) метрика:
+    mae = mean_absolute_error(y_val, y_val_pred)
+
+6) обучение на всех данных:
+    model.fit(X, y)
+    test_pred = model.predict(X_test)
+
+7) сабмит:
+    submission[target_col] = test_pred
+    submission.to_csv("submission.csv", index=False)
+"""
+
+# ============================================================
+# 3. БУСТИНГИ (CATBOOST) — что это и как использовать
+# ============================================================
+
+CATBOOST_HELP = """
+CATBOOST (градиентный бустинг по деревьям)
+-----------------------------------------
+- Главная идея: ансамбль деревьев, обучаемых последовательно.
+- Главное отличие от RandomForest:
+    * у RandomForest деревья независимые (bagging),
+    * у CatBoost деревья строятся по очереди (boosting) и учитывают ошибки прошлых.
+
+Плюсы CatBoost:
+- Обычно даёт лучшее качество на табличных данных.
+- Умеет работать с категориальными признаками напрямую (без get_dummies).
+
+Как использовать (регрессия):
+-----------------------------
+1) X, y как обычно.
+2) cat_cols = список категориальных признаков (тип object/category).
+3) Привести X[col].astype("category").
+4) model = CatBoostRegressor(... параметры ...)
+5) model.fit(X_train, y_train, eval_set=(X_val, y_val), cat_features=cat_cols)
+
+Как использовать (классификация):
+---------------------------------
+1) y преобразовать через LabelEncoder (строка -> число).
+2) CatBoostClassifier( loss_function="MultiClass" / "Logloss" ... ).
+3) Остальное аналогично.
+"""
+
+
+# ============================================================
+# 4. ШАБЛОНЫ ЗАДАЧ
+# ============================================================
+
+# ------------------------------------------------------------
+# 4.1. Табличная РЕГРЕССИЯ (A-подобная) с CatBoost
+# ------------------------------------------------------------
+
+def template_tabular_regression_catboost():
     """
-    ШАБЛОН ДЛЯ РЕГРЕССИИ (например, задача A):
+    Шаблон для A-подобной задачи (регрессия) с CatBoostRegressor.
+
+    Ожидаем файлы:
     - train.csv
     - test.csv
     - sample_submission.csv
 
     ПЕРЕД ЗАПУСКОМ:
-    1) Поменять пути TRAIN_PATH / TEST_PATH / SAMPLE_SUB_PATH.
-    2) Поставить правильные TARGET_COL и ID_COL.
-    3) (по желанию) добавить свои фичи.
+    - Поменять TRAIN_PATH / TEST_PATH / SAMPLE_SUB_PATH.
+    - Поставить правильные TARGET_COL и ID_COL.
+    - Убедиться, что catboost установлен.
     """
 
-    # ---------- 3.1 КОНФИГ ----------
+    if CatBoostRegressor is None:
+        print("CatBoostRegressor не установлен. Установи catboost или используй RandomForest.")
+        return
+
+    print("\n=== TEMPLATE: TABULAR REGRESSION (CatBoost) ===")
+
+    # --- настройки (менять под задачу) ---
     TRAIN_PATH = "train.csv"
     TEST_PATH = "test.csv"
     SAMPLE_SUB_PATH = "sample_submission.csv"
 
-    TARGET_COL = "transaction_sum"   # ИМЯ таргета
-    ID_COL = "location_id"           # ИМЯ ID
+    TARGET_COL = "transaction_sum"  # имя столбца-таргета
+    ID_COL = "location_id"          # идентификатор объекта
 
     RANDOM_STATE = 42
     VAL_SIZE = 0.2
 
-    print("\n=== TABULAR REGRESSION TEMPLATE ===")
-
-    # ---------- 3.2 ЗАГРУЗКА ----------
+    # --- загрузка данных ---
     train = pd.read_csv(TRAIN_PATH)
     test = pd.read_csv(TEST_PATH)
     sample_sub = pd.read_csv(SAMPLE_SUB_PATH)
@@ -279,84 +321,109 @@ def tabular_regression_template():
     print_basic_info(train, "train")
     print_basic_info(test, "test")
 
-    # ---------- 3.3 X, y ----------
+    # --- разделяем на X и y ---
     y = train[TARGET_COL]
     X = train.drop(columns=[TARGET_COL, ID_COL])
     X_test = test.drop(columns=[ID_COL])
 
-    # МЕСТО ДЛЯ СВОИХ ФИЧ:
-    # Примеры — писать ТОЛЬКО если такие колонки реально есть
+    # --- пример добавления своих фич (если нужны) ---
     # if "customers_count" in X.columns and "objects_count" in X.columns:
     #     X["customers_per_object"] = X["customers_count"] / (X["objects_count"] + 1)
     #     X_test["customers_per_object"] = X_test["customers_count"] / (X_test["objects_count"] + 1)
 
-    # ---------- 3.4 КАТЕГОРИАЛЬНЫЕ ПРИЗНАКИ ----------
-    X_model, X_test_model, cat_cols = encode_categoricals_get_dummies(X, X_test)
+    # --- категориальные признаки (без get_dummies) ---
+    cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+    print("\nCatBoost, категориальные признаки:", cat_cols)
 
-    # ---------- 3.5 TRAIN/VAL SPLIT ----------
-    X_train, X_val, y_train, y_val = split_train_val(
-        X_model, y, is_classification=False,
-        test_size=VAL_SIZE, random_state=RANDOM_STATE
-    )
+    for col in cat_cols:
+        X[col] = X[col].astype("category")
+        X_test[col] = X_test[col].astype("category")
 
-    # ---------- 3.6 МОДЕЛЬ RandomForestRegressor ----------
-    model = RandomForestRegressor(
-        n_estimators=400,
-        max_depth=None,
-        min_samples_leaf=2,
-        n_jobs=-1,
+    # --- train/val split ---
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y,
+        test_size=VAL_SIZE,
         random_state=RANDOM_STATE
     )
 
-    print("\n>> Обучение RandomForestRegressor...")
-    model.fit(X_train, y_train)
+    # --- модель CatBoostRegressor ---
+    model = CatBoostRegressor(
+        loss_function="MAE",   # подходит, если метрика связана с MAE
+        eval_metric="MAE",
+        depth=8,
+        learning_rate=0.05,
+        iterations=1000,
+        random_state=RANDOM_STATE,
+        verbose=100
+    )
 
-    # ---------- 3.7 ОЦЕНКА НА ВАЛИДАЦИИ ----------
+    print("\n>> Обучаем CatBoostRegressor...")
+    model.fit(
+        X_train, y_train,
+        eval_set=(X_val, y_val),
+        cat_features=cat_cols,
+        use_best_model=True
+    )
+
+    # --- оценка на валидации ---
     y_val_pred = model.predict(X_val)
     evaluate_regression(y_val, y_val_pred, use_log_mae=True)
 
-    # ---------- 3.8 ОБУЧЕНИЕ НА ВСЁМ TRAIN И SUBMISSION ----------
-    print("\n>> Обучение на всех данных и предсказание для test...")
-    model.fit(X_model, y)
+    # --- обучение на всех train-данных ---
+    print("\n>> Обучаем модель на всех train-данных и предсказываем для test...")
+    model.fit(
+        X, y,
+        cat_features=cat_cols,
+        verbose=100
+    )
 
-    test_pred = model.predict(X_test_model)
+    test_pred = model.predict(X_test)
 
+    # --- формируем submission ---
     submission = sample_sub.copy()
     if TARGET_COL not in submission.columns:
         submission[TARGET_COL] = test_pred
     else:
         submission[TARGET_COL] = test_pred
 
-    submission.to_csv("submission_regression.csv", index=False)
-    print("Сохранён файл submission_regression.csv")
+    out_path = "submission_catboost_regression.csv"
+    submission.to_csv(out_path, index=False)
+    print(f"Сохранён файл {out_path}")
 
 
-# ============================================================
-# 4. ШАБЛОН: ТАБЛИЧНАЯ КЛАССИФИКАЦИЯ
-# ============================================================
+# ------------------------------------------------------------
+# 4.2. Табличная КЛАССИФИКАЦИЯ с CatBoost
+# ------------------------------------------------------------
 
-def tabular_classification_template():
+def template_tabular_classification_catboost():
     """
-    Шаблон для КЛАССИФИКАЦИИ:
-    - таргет — класс (строка/число),
-    - метрика — accuracy/F1.
+    Шаблон для табличной классификации с CatBoostClassifier.
+
+    Ожидаем файлы:
+    - train.csv
+    - test.csv
+    - sample_submission.csv
 
     ПЕРЕД ЗАПУСКОМ:
-    - указать TRAIN_PATH / TEST_PATH / SAMPLE_SUB_PATH
-    - поставить TARGET_COL и ID_COL.
+    - Поменять пути и имена колонок.
     """
+
+    if CatBoostClassifier is None:
+        print("CatBoostClassifier не установлен. Установи catboost или используй RandomForestClassifier.")
+        return
+
+    print("\n=== TEMPLATE: TABULAR CLASSIFICATION (CatBoost) ===")
 
     TRAIN_PATH = "train.csv"
     TEST_PATH = "test.csv"
     SAMPLE_SUB_PATH = "sample_submission.csv"
 
-    TARGET_COL = "target_class"
+    TARGET_COL = "target_class"  # имя столбца с классом
     ID_COL = "id"
 
     RANDOM_STATE = 42
     VAL_SIZE = 0.2
 
-    print("\n=== TABULAR CLASSIFICATION TEMPLATE ===")
     train = pd.read_csv(TRAIN_PATH)
     test = pd.read_csv(TEST_PATH)
     sample_sub = pd.read_csv(SAMPLE_SUB_PATH)
@@ -364,7 +431,7 @@ def tabular_classification_template():
     print_basic_info(train, "train")
     print_basic_info(test, "test")
 
-    # y_raw могут быть строками (названия классов)
+    # target (строки → числа)
     y_raw = train[TARGET_COL]
     le = LabelEncoder()
     y = le.fit_transform(y_raw)
@@ -373,34 +440,50 @@ def tabular_classification_template():
     X = train.drop(columns=[TARGET_COL, ID_COL])
     X_test = test.drop(columns=[ID_COL])
 
-    # Кодируем категориальные
-    X_model, X_test_model, cat_cols = encode_categoricals_get_dummies(X, X_test)
+    # категориальные признаки
+    cat_cols = X.select_dtypes(include=["object", "category"]).columns.tolist()
+    print("\nCatBoost, категориальные признаки:", cat_cols)
 
-    # TRAIN/VAL с стратификацией
-    X_train, X_val, y_train, y_val = split_train_val(
-        X_model, y, is_classification=True,
-        test_size=VAL_SIZE, random_state=RANDOM_STATE
+    for col in cat_cols:
+        X[col] = X[col].astype("category")
+        X_test[col] = X_test[col].astype("category")
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y,
+        test_size=VAL_SIZE,
+        random_state=RANDOM_STATE,
+        stratify=y
     )
 
-    # Модель
-    model = RandomForestClassifier(
-        n_estimators=400,
-        max_depth=None,
-        min_samples_leaf=2,
-        n_jobs=-1,
-        random_state=RANDOM_STATE
+    model = CatBoostClassifier(
+        loss_function="MultiClass",    # многоклассовая классификация
+        eval_metric="TotalF1",         # можно менять под задачу
+        depth=8,
+        learning_rate=0.05,
+        iterations=1000,
+        random_state=RANDOM_STATE,
+        verbose=100
     )
 
-    print("\n>> Обучение RandomForestClassifier...")
-    model.fit(X_train, y_train)
+    print("\n>> Обучаем CatBoostClassifier...")
+    model.fit(
+        X_train, y_train,
+        eval_set=(X_val, y_val),
+        cat_features=cat_cols,
+        use_best_model=True
+    )
 
-    y_val_pred = model.predict(X_val)
+    y_val_pred = model.predict(X_val).reshape(-1)
     evaluate_classification(y_val, y_val_pred)
 
-    # Обучаемся на всех данных
-    print("\n>> Обучение на всех данных и предсказание на test...")
-    model.fit(X_model, y)
-    test_pred = model.predict(X_test_model)
+    print("\n>> Обучаемся на всех данных и делаем предсказания для test...")
+    model.fit(
+        X, y,
+        cat_features=cat_cols,
+        verbose=100
+    )
+
+    test_pred = model.predict(X_test).reshape(-1)
     test_labels = le.inverse_transform(test_pred)
 
     submission = sample_sub.copy()
@@ -409,78 +492,86 @@ def tabular_classification_template():
     else:
         submission[TARGET_COL] = test_labels
 
-    submission.to_csv("submission_classification.csv", index=False)
-    print("Сохранён файл submission_classification.csv")
+    out_path = "submission_catboost_classification.csv"
+    submission.to_csv(out_path, index=False)
+    print(f"Сохранён файл {out_path}")
 
 
-# ============================================================
-# 5. ШАБЛОН: MERGE НЕСКОЛЬКИХ ТАБЛИЦ ПО КЛЮЧУ
-# ============================================================
+# ------------------------------------------------------------
+# 4.3. Пример: MERGE нескольких таблиц по ключу
+# ------------------------------------------------------------
 
-def merge_example_template():
+def template_merge_example():
     """
-    Шаблон, как объединять несколько таблиц по ключу (например, h3_index):
+    Пример, как объединить train/test с дополнительной таблицей (например geo_data).
+
+    Ожидаем:
     - train.csv, test.csv
-    - geo_data.parquet
+    - geo_data.parquet (или csv), есть общий ключ (например h3_index)
 
-    Дальше — обычный пайплайн регрессии/классификации.
+    После merge получаем train_merged / test_merged и дальше используем
+    один из шаблонов регрессии/классификации.
     """
 
-    print("\n=== MERGE EXAMPLE TEMPLATE ===")
+    print("\n=== TEMPLATE: MERGE EXAMPLE ===")
 
     TRAIN_PATH = "train.csv"
     TEST_PATH = "test.csv"
-    GEO_PATH = "geo_data.parquet"
+    GEO_PATH = "geo_data.parquet"  # или .csv
+
+    KEY_COL = "h3_index"  # по какому ключу мержим
 
     train = pd.read_csv(TRAIN_PATH)
     test = pd.read_csv(TEST_PATH)
-    geo = pd.read_parquet(GEO_PATH)
+
+    if GEO_PATH.endswith(".parquet"):
+        geo = pd.read_parquet(GEO_PATH)
+    else:
+        geo = pd.read_csv(GEO_PATH)
 
     print_basic_info(train, "train BEFORE merge")
     print_basic_info(geo, "geo")
 
-    # Предположим, ключ — h3_index
-    train_merged = train.merge(geo, on="h3_index", how="left")
-    test_merged = test.merge(geo, on="h3_index", how="left")
+    train_merged = train.merge(geo, on=KEY_COL, how="left")
+    test_merged = test.merge(geo, on=KEY_COL, how="left")
 
     print_basic_info(train_merged, "train_merged")
     print_basic_info(test_merged, "test_merged")
 
-    # Дальше с train_merged и test_merged можно делать всё то же,
-    # что в tabular_regression_template / tabular_classification_template:
+    # дальше:
     # y = train_merged[TARGET_COL]
-    # X = train_merged.drop(columns=[TARGET_COL, ID_COL, "h3_index"])
-    # X_test = test_merged.drop(columns=[ID_COL, "h3_index"])
-    # ...
+    # X = train_merged.drop(columns=[TARGET_COL, ID_COL, KEY_COL])
+    # X_test = test_merged.drop(columns=[ID_COL, KEY_COL])
+    # ... использовать один из шаблонов выше.
 
 
-# ============================================================
-# 6. ШАБЛОН: ТЕКСТЫ / ПАРЫ ТЕКСТОВ (TF-IDF + LOGISTIC REGRESSION)
-# ============================================================
+# ------------------------------------------------------------
+# 4.4. TEXT PAIRS (B-подобная) — TF-IDF + LogisticRegression
+# ------------------------------------------------------------
 
-def text_pairs_tfidf_template():
+def template_text_pairs_tfidf():
     """
-    Шаблон под B-подобные задачи:
+    Шаблон под задачу, похожую на B:
+
+    Дано:
     - items.parquet: item_id, title, text
     - train.csv: pair_id, left_id, right_id, label
     - test.csv: pair_id, left_id, right_id
     - sample_submission.csv: pair_id, label
 
     Идея:
-    1) Мержим train/test с items по left_id/right_id.
-    2) Собираем текст пары: [left_title+text] [SEP] [right_title+text].
-    3) TF-IDF → матрица признаков.
-    4) LogisticRegression → weighted F1.
+    - смержить train/test с items (left/right)
+    - собрать текст пары: left_title + left_text + [SEP] + right_title + right_text
+    - TF-IDF → LogisticRegression
     """
 
-    print("\n=== TEXT PAIRS TF-IDF TEMPLATE ===")
+    print("\n=== TEMPLATE: TEXT PAIRS TF-IDF ===")
 
     ITEMS_PATH = "items.parquet"
     TRAIN_PATH = "train.csv"
     TEST_PATH = "test.csv"
     SAMPLE_SUB_PATH = "sample_submission.csv"
 
-    # Названия колонок
     ID_COL = "pair_id"
     LABEL_COL = "label"
 
@@ -493,13 +584,11 @@ def text_pairs_tfidf_template():
     print_basic_info(train, "train")
     print_basic_info(test, "test")
 
-    # Готовим левую и правую части
     items_left = items.rename(columns={
         "item_id": "left_id",
         "title": "title_left",
         "text": "text_left",
     })
-
     items_right = items.rename(columns={
         "item_id": "right_id",
         "title": "title_right",
@@ -518,10 +607,6 @@ def text_pairs_tfidf_template():
         .merge(items_right, on="right_id", how="left")
     )
 
-    print_basic_info(train_merged[[ID_COL, "left_id", "right_id", LABEL_COL,
-                                   "title_left", "title_right"]], "train_merged small")
-
-    # Собираем текст пары
     def build_pair_text(df: pd.DataFrame) -> pd.Series:
         return (
             df["title_left"].fillna("") + " " +
@@ -535,12 +620,10 @@ def text_pairs_tfidf_template():
 
     print("\nПример текста пары:\n", train_texts.iloc[0])
 
-    # Кодируем метки в числа
     le = LabelEncoder()
     y = le.fit_transform(train_merged[LABEL_COL])
     print("Классы:", list(le.classes_))
 
-    # TF-IDF
     vectorizer = TfidfVectorizer(
         max_features=100_000,
         ngram_range=(1, 2),
@@ -553,7 +636,6 @@ def text_pairs_tfidf_template():
     print("X shape:", X.shape)
     print("X_test shape:", X_test.shape)
 
-    # train/val
     X_train, X_val, y_train, y_val = train_test_split(
         X, y,
         test_size=0.2,
@@ -561,20 +643,18 @@ def text_pairs_tfidf_template():
         stratify=y
     )
 
-    # Модель
     clf = LogisticRegression(
         max_iter=2000,
         n_jobs=-1
     )
 
-    print("\n>> Обучение LogisticRegression...")
+    print("\n>> Обучаем LogisticRegression (TF-IDF)...")
     clf.fit(X_train, y_train)
 
     y_val_pred = clf.predict(X_val)
     f1w = f1_score(y_val, y_val_pred, average="weighted")
     print("Validation weighted F1:", f1w)
 
-    # Обучаем на всех данных + сабмит
     clf.fit(X, y)
     test_pred = clf.predict(X_test)
     test_labels = le.inverse_transform(test_pred)
@@ -585,56 +665,51 @@ def text_pairs_tfidf_template():
     else:
         submission[LABEL_COL] = test_labels
 
-    submission.to_csv("submission_text_pairs.csv", index=False)
-    print("Сохранён файл submission_text_pairs.csv")
+    out_path = "submission_text_pairs.csv"
+    submission.to_csv(out_path, index=False)
+    print(f"Сохранён файл {out_path}")
 
 
-# ============================================================
-# 7. ШАБЛОН: ГЕНЕРАТИВНАЯ ЗАДАЧА С ЛОКАЛЬНОЙ LLM
-# ============================================================
+# ------------------------------------------------------------
+# 4.5. Генеративная задача (локальная LLM)
+# ------------------------------------------------------------
 
-def generative_llm_template():
+def template_generative_llm():
     """
-    Шаблон для генеративной задачи:
+    Генеративная задача с локальной LLM:
 
-    test.csv:
-        - колонка INPUT_COL, например "input_text" / "question"
-    sample_submission.csv:
-        - колонка OUTPUT_COL, например "output_text"
+    Ожидаем:
+    - test.csv, в нём колонка INPUT_COL (например, "input_text")
+    - sample_submission.csv, в нём колонка OUTPUT_COL (например, "output_text")
+    - модель лежит в MODEL_PATH (в Shared)
 
-    LLM:
-        - лежит локально в MODEL_PATH (например, в Shared).
-
-    ПЕРЕД ЗАПУСКОМ:
-    - поменять MODEL_PATH, TEST_PATH, SAMPLE_SUB_PATH
-    - указать INPUT_COL, OUTPUT_COL
-    - подстроить build_prompt() под условие задачи.
+    ВАЖНО:
+    - Подстроить MODEL_PATH, INPUT_COL, OUTPUT_COL и build_prompt под реальную задачу.
     """
 
     if torch is None or AutoTokenizer is None or AutoModelForCausalLM is None:
-        print("transformers / torch не установлены. Генеративный шаблон недоступен.")
+        print("transformers/torch не установлены — генеративный шаблон недоступен.")
         return
 
-    print("\n=== GENERATIVE LLM TEMPLATE ===")
+    print("\n=== TEMPLATE: GENERATIVE LLM ===")
 
-    MODEL_PATH = "/path/to/local/model"   # ПУТЬ К МОДЕЛИ (из Shared)
+    MODEL_PATH = "/path/to/local/model"  # поменять на путь в Shared
     TEST_PATH = "test.csv"
     SAMPLE_SUB_PATH = "sample_submission.csv"
 
-    INPUT_COL = "input_text"              # имя колонки с входным текстом
-    OUTPUT_COL = "output_text"            # имя колонки для ответа
+    INPUT_COL = "input_text"
+    OUTPUT_COL = "output_text"
 
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     MAX_NEW_TOKENS = 128
     BATCH_SIZE = 4
 
-    print("Загрузка модели из:", MODEL_PATH)
+    print("Загружаем модель из:", MODEL_PATH)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
     model = AutoModelForCausalLM.from_pretrained(MODEL_PATH)
     model.to(DEVICE)
     model.eval()
 
-    print("Читаем данные...")
     test = pd.read_csv(TEST_PATH)
     sample_sub = pd.read_csv(SAMPLE_SUB_PATH)
 
@@ -643,9 +718,7 @@ def generative_llm_template():
 
     def build_prompt(x: str) -> str:
         """
-        Настройка промпта под задачу.
-        Здесь — универсальный пример.
-        В реальной задаче подстраивать под условие.
+        Шаблон промпта — подстраивать под условие задачи.
         """
         return f"Входной текст:\n{x}\n\nОтветь кратко и понятно на русском языке:"
 
@@ -667,12 +740,11 @@ def generative_llm_template():
                 **enc,
                 max_new_tokens=MAX_NEW_TOKENS,
                 do_sample=False,
-                eos_token_id=tokenizer.eos_token_id
+                eos_token_id=tokenizer.eos_token_id,
             )
 
         decoded = tokenizer.batch_decode(gen, skip_special_tokens=True)
 
-        # Обрезаем промпт из начала, оставляем только "ответ"
         for prompt, full in zip(prompts, decoded):
             if full.startswith(prompt):
                 answer = full[len(prompt):].strip()
@@ -690,89 +762,101 @@ def generative_llm_template():
     else:
         submission[OUTPUT_COL] = outputs
 
-    OUT_PATH = "submission_generative.csv"
-    submission.to_csv(OUT_PATH, index=False)
-    print(f"Сохранён файл {OUT_PATH}")
+    out_path = "submission_generative.csv"
+    submission.to_csv(out_path, index=False)
+    print(f"Сохранён файл {out_path}")
     print(submission.head())
 
 
+# ------------------------------------------------------------
+# 4.6. Аудио baseline — как из аудио сделать табличку
+# ------------------------------------------------------------
+
+def template_audio_baseline():
+    """
+    Базовый шаблон для аудио-задачи:
+
+    Ожидаем:
+    - train.csv: file_name, target
+    - test.csv: file_name
+    - папка AUDIO_DIR с wav-файлами
+
+    Идея:
+    - прочитать аудио,
+    - посчитать простые признаки (mean, std, mfcc_mean, mfcc_std),
+    - получить табличку и дальше использовать шаблон CatBoost/RandomForest.
+
+    НУЖНО:
+    - библиотека librosa (если её не будет на олимпиаде, будет пример только как идея).
+    """
+
+    try:
+        import librosa
+    except ImportError:
+        print("librosa не установлена — аудио baseline как код может не работать, но логика показана.")
+        return
+
+    print("\n=== TEMPLATE: AUDIO BASELINE ===")
+
+    TRAIN_CSV = "train.csv"
+    TEST_CSV = "test.csv"
+    AUDIO_DIR = "audio"  # папка с wav
+
+    train = pd.read_csv(TRAIN_CSV)
+    test = pd.read_csv(TEST_CSV)
+
+    print_basic_info(train, "train")
+    print_basic_info(test, "test")
+
+    def extract_features(path, sr=16000):
+        """
+        Вычислить простые признаки для одного аудио:
+        - mean, std по сигналу
+        - mfcc_mean, mfcc_std по MFCC
+        """
+        y, sr = librosa.load(path, sr=sr)
+        feats = {}
+        feats["signal_mean"] = float(np.mean(y))
+        feats["signal_std"] = float(np.std(y))
+
+        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=20)
+        feats["mfcc_mean"] = float(mfcc.mean())
+        feats["mfcc_std"] = float(mfcc.std())
+        return feats
+
+    def build_features(df):
+        rows = []
+        for fname in df["file_name"]:
+            full_path = os.path.join(AUDIO_DIR, fname)
+            feats = extract_features(full_path)
+            feats["file_name"] = fname
+            rows.append(feats)
+        return pd.DataFrame(rows)
+
+    print("Извлекаем признаки для train...")
+    train_feats = build_features(train)
+    print("Извлекаем признаки для test...")
+    test_feats = build_features(test)
+
+    train_full = train.merge(train_feats, on="file_name")
+    test_full = test.merge(test_feats, on="file_name")
+
+    print_basic_info(train_full, "train_full")
+    print_basic_info(test_full, "test_full")
+
+    # Дальше:
+    # y = train_full["target"]
+    # X = train_full.drop(columns=["target", "file_name"])
+    # X_test = test_full.drop(columns=["file_name"])
+    # ... и можно применить template_tabular_regression_catboost / RandomForest.
+    print("Дальше можно использовать любой табличный шаблон (CatBoost / RandomForest).")
+
+
 # ============================================================
-# 8. МИНИ-СПРАВОЧНИК ПО ФУНКЦИЯМ/КЛАССАМ (как напоминалка)
+# ФИНАЛ: что делать при прямом запуске файла
 # ============================================================
-
-"""
-pandas:
-- pd.read_csv(path), pd.read_parquet(path)
-    → прочитать таблицу.
-
-- df.head(n)
-    → первые n строк.
-
-- df.info()
-    → типы столбцов + количество non-null.
-
-- df.describe()
-    → статистика по числовым колонкам.
-
-- df["col"], df[["col1", "col2"]]
-    → доступ к столбцам.
-
-- df.drop(columns=[...])
-    → удалить столбцы.
-
-- df.merge(other, on="key", how="left")
-    → SQL-левый join: "присоединить фичи из другой таблицы".
-
-- pd.get_dummies(df, columns=[...])
-    → one-hot кодирование категориальных признаков.
-
-sklearn.model_selection:
-- train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-    → разбить данные на train и val.
-
-sklearn.preprocessing:
-- LabelEncoder:
-    le = LabelEncoder()
-    y = le.fit_transform(y_raw)        # строки → числа
-    y_back = le.inverse_transform(y)   # числа → строки
-
-sklearn.feature_extraction.text:
-- TfidfVectorizer:
-    v = TfidfVectorizer(...)
-    X = v.fit_transform(list_of_texts)
-    X_test = v.transform(list_of_texts_test)
-
-Модели:
-- RandomForestRegressor / RandomForestClassifier:
-    ансамбль деревьев; хорошо работает "из коробки" на табличных данных.
-
-- LinearRegression:
-    классическая линейная регрессия.
-
-- LogisticRegression:
-    линейная модель для классификации; очень часто — TF-IDF + LogisticRegression.
-
-- DecisionTreeRegressor / DecisionTreeClassifier:
-    одно дерево; можно использовать как baseline или для анализа.
-
-- CatBoostRegressor / CatBoostClassifier:
-    градиентный бустинг по деревьям, дружит с категориальными признаками.
-    Важный параметр: cat_features = [индексы_категориальных_столбцов].
-
-Метрики:
-- mean_absolute_error(y_true, y_pred)       → MAE.
-- r2_score(y_true, y_pred)                  → R².
-- accuracy_score(y_true, y_pred)            → доля правильных ответов.
-- f1_score(y_true, y_pred, average="weighted") → F1 с учётом долей классов.
-
-ГЛАВНЫЙ ПАТТЕРН ДЛЯ 90% ЗАДАЧ:
-X, y → train_test_split → model.fit → predict → метрика →
-обучение на всех данных → predict на test → submission.csv.
-"""
-
 
 if __name__ == "__main__":
-    # При прямом запуске файла ничего автоматически не делаем,
-    # чтобы случайно не запустить тяжёлые вещи.
     print("SUPER ML OLYMP CHEATSHEET загружен.")
-    print("Открой этот файл и используй нужные шаблоны-функции.")
+    print("Открой файл, выбери нужный шаблон (template_...) и копируй в своё решение.")
+    print("Также можно вызвать функции прямо отсюда, если указать правильные пути к данным.")
